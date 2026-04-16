@@ -1,0 +1,369 @@
+// js/app.js - Main Application Logic
+
+// Global Variables
+let tournaments = [];
+let teams = [];
+let matches = [];
+let players = [];
+
+// Initialize App
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🏏 Village Cricket App Initialized');
+    loadTournamentData();
+    checkLiveMatch();
+    setInterval(checkLiveMatch, 30000); // Check every 30 seconds
+});
+
+// Load All Tournament Data
+async function loadTournamentData() {
+    try {
+        showLoading(true);
+        
+        // Load Teams
+        await loadTeams();
+        
+        // Load Matches
+        await loadMatches();
+        
+        // Load Players (for stats)
+        await loadPlayers();
+        
+        // Update UI
+        updateStats();
+        renderMatches();
+        renderPointsTable();
+        renderTeams();
+        updateTopPerformers();
+        
+        showLoading(false);
+    } catch (error) {
+        console.error('Error loading data:', error);
+        showError('Data load में error आया है');
+    }
+}
+
+// Load Teams from Firestore
+async function loadTeams() {
+    const snapshot = await db.collection('teams').orderBy('name').get();
+    teams = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+}
+
+// Load Matches from Firestore
+async function loadMatches() {
+    const snapshot = await db.collection('matches')
+        .orderBy('date', 'desc')
+        .limit(20)
+        .get();
+    
+    matches = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+}
+
+// Load Players for Statistics
+async function loadPlayers() {
+    const snapshot = await db.collection('players').get();
+    players = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+}
+
+// Update Statistics Cards
+function updateStats() {
+    document.getElementById('total-teams').textContent = teams.length;
+    document.getElementById('total-matches').textContent = matches.filter(m => m.status === 'completed').length;
+    
+    const totalRuns = matches.reduce((sum, match) => sum + (match.team1Score?.runs || 0) + (match.team2Score?.runs || 0), 0);
+    document.getElementById('total-runs').textContent = totalRuns;
+    
+    const totalWickets = matches.reduce((sum, match) => 
+        sum + (match.team1Score?.wickets || 0) + (match.team2Score?.wickets || 0), 0);
+    document.getElementById('total-wickets').textContent = totalWickets;
+}
+
+// Render Matches List
+function renderMatches() {
+    const container = document.getElementById('matches-list');
+    
+    if (matches.length === 0) {
+        container.innerHTML = `
+            <div class="no-data">
+                <p>📅 कोई match scheduled नहीं है</p>
+                <p>Admin match add करेंगे</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Show upcoming and recent matches (max 10)
+    const displayMatches = matches.slice(0, 10);
+    
+    container.innerHTML = displayMatches.map(match => createMatchCard(match)).join('');
+}
+
+// Create Match Card HTML
+function createMatchCard(match) {
+    const team1 = teams.find(t => t.id === match.team1Id);
+    const team2 = teams.find(t => t.id === match.team2Id);
+    
+    if (!team1 || !team2) return '';
+    
+    const isLive = match.status === 'live';
+    const isCompleted = match.status === 'completed';
+    const isUpcoming = match.status === 'upcoming';
+    
+    let statusClass = '';
+    let statusText = '';
+    
+    if (isLive) {
+        statusClass = 'live-indicator';
+        statusText = '🔴 LIVE';
+    } else if (isCompleted) {
+        statusText = getMatchResult(match);
+    } else {
+        statusText = formatDate(match.date);
+    }
+    
+    return `
+        <div class="match-card" onclick="${isLive ? `window.location.href='scoreboard.html?id=${match.id}'` : ''}">
+            <div class="team-info">
+                <div class="team-name">${team1.name} ${team1.emoji || '🏏'}</div>
+                ${isCompleted || isLive ? 
+                    `<div class="team-score">${match.team1Score?.runs || 0}/${match.team1Score?.wickets || 0}</div>
+                     <div class="overs">(${match.team1Score?.overs || 0} ov)</div>` : 
+                    '<div class="team-score">-</div>'
+                }
+            </div>
+            
+            <div class="match-status">
+                <div class="match-date">${formatDate(match.date)}</div>
+                <div class="vs-badge">VS</div>
+                <div class="${statusClass}">${statusText}</div>
+                ${isLive ? '<a href="scoreboard.html?id=' + match.id + '" class="btn-watch-small">Watch →</a>' : ''}
+            </div>
+            
+            <div class="team-info">
+                <div class="team-name">${team2.emoji || '🏏'} ${team2.name}</div>
+                ${isCompleted || isLive ? 
+                    `<div class="team-score">${match.team2Score?.runs || 0}/${match.team2Score?.wickets ||runs || 0}/${match.team2Score?.wickets || 0}</div>
+                     <div class="overs">(${match.team2Score?.overs || 0} ov)</div>` : 
+                    '<div class="team-score">-</div>'
+                }
+            </div>
+        </div>
+    `;
+}
+
+// Get Match Result Text
+function getMatchResult(match) {
+    if (!match.result) return 'Match Completed';
+    
+    const winnerTeam = teams.find(t => t.id === match.winnerId);
+    if (winnerTeam) {
+        return `${winnerTeam.name} won by ${result.margin}`;
+    }
+    
+    return match.result;
+}
+
+// Render Points Table
+function renderPointsTable() {
+    const tbody = document.getElementById('points-table-body');
+    
+    if (teams.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">कोई team नहीं है</td></tr>';
+        return;
+    }
+    
+    // Calculate points for each team
+    const pointsData = teams.map(team => {
+        const teamMatches = matches.filter(m => 
+            m.team1Id === team.id || m.team2Id === team.id && m.status === 'completed'
+        );
+        
+        const wins = teamMatches.filter(m => m.winnerId === team.id).length;
+        const losses = teamMatches.filter(m => 
+            m.winnerId && m.winnerId !== team.id && m.status === 'completed'
+        ).length;
+        const ties = teamMatches.filter(m => m.result === 'tie').length;
+        const played = wins + losses + ties;
+        const points = (wins * 2) + (ties * 1);
+        
+        // Calculate Net Run Rate (simplified)
+        let nrr = 0.000;
+        if (played > 0) {
+            const teamRuns = teamMatches.reduce((sum, m) => {
+                if (m.team1Id === team.id) return sum + (m.team1Score?.runs || 0);
+                return sum + (m.team2Score?.runs || 0);
+            }, 0);
+            nrr = parseFloat((teamRuns / played).toFixed(3));
+        }
+        
+        return {
+            ...team,
+            played,
+            wins,
+            losses,
+            ties,
+            nrr,
+            points
+        };
+    });
+    
+    // Sort by points (desc), then by NRR (desc)
+    pointsData.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        return b.nrr - a.nrr;
+    });
+    
+    tbody.innerHTML = pointsData.map((team, index) => `
+        <tr>
+            <td><span class="position-badge">${index + 1}</span></td>
+            <td class="team-cell">${team.emoji || '🏏'} ${team.name}</td>
+            <td>${team.played}</td>
+            <td>${team.wins}</td>
+            <td>${team.losses}</td>
+            <td>${team.ties}</td>
+            <td>${team.nrr.toFixed(3)}</td>
+            <td><strong>${team.points}</strong></td>
+        </tr>
+    `).join('');
+}
+
+// Render Teams Grid
+function renderTeams() {
+    const container = document.getElementById('teams-grid');
+    
+    if (teams.length === 0) {
+        container.innerHTML = '<p class="no-data">कोई team registered नहीं है</p>';
+        return;
+    }
+    
+    container.innerHTML = teams.map(team => {
+        const teamPlayers = players.filter(p => p.teamId === team.id);
+        
+        return `
+            <div class="team-card">
+                <div class="team-logo">${team.emoji || '🏏'}</div>
+                <h3>${team.name}</h3>
+                <p class="captain">Captain: ${team.captain || '-'}</p>
+                <div class="team-stats">
+                    <div class="team-stat">
+                        <strong>${teamPlayers.length}</strong>
+                        <span>Players</span>
+                    </div>
+                    <div class="team-stat">
+                        <strong>${matches.filter(m => (m.team1Id === team.id || m.team2Id === team.id) && m.status === 'completed').length}</strong>
+                        <span>Played</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Update Top Performers
+function updateTopPerformers() {
+    // Top Batsman (by runs)
+    const batsmen = players.filter(p => p.battingStats).sort((a, b) => 
+        (b.battingStats.runs || 0) - (a.battingStats.runs || 0)
+    );
+    
+    if (batsmen.length > 0) {
+        const topBatsman = batsmen[0];
+        const batsmanTeam = teams.find(t => t.id === topBatsman.teamId);
+        
+        document.getElementById('top-batsman').innerHTML = `
+            <p class="player-name">${topBatsman.name}</p>
+            <p class="team-name">${batsmanTeam?.name || '-'}</p>
+            <p class="stats">Runs: ${topBatsman.battingStats.runs || 0} | Avg: ${(topBatsman.battingStats.average || 0).toFixed(2)}</p>
+        `;
+    }
+    
+    // Top Bowler (by wickets)
+    const bowlers = players.filter(p => p.bowlingStats).sort((a, b) => 
+        (b.bowlingStats.wickets || 0) - (a.bowlingStats.wickets || 0)
+    );
+    
+    if (bowlers.length > 0) {
+        const topBowler = bowlers[0];
+        const bowlerTeam = teams.find(t => t.id === topBowler.teamId);
+        
+        document.getElementById('top-bowler').innerHTML = `
+            <p class="player-name">${topBowler.name}</p>
+            <p class="team-name">${bowlerTeam?.name || '-'}</p>
+            <p class="stats">Wickets: ${topBowler.bowlingStats.wickets || 0} | Avg: ${(topBowler.bowlingStats.average || 0).toFixed(2)}</p>
+        `;
+    }
+}
+
+// Check for Live Match
+async function checkLiveMatch() {
+    try {
+        const snapshot = await db.collection('matches')
+            .where('status', '==', 'live')
+            .limit(1)
+            .get();
+        
+        const banner = document.getElementById('live-match-banner');
+        
+        if (!snapshot.empty) {
+            banner.style.display = 'inline-flex';
+            const liveMatch = snapshot.docs[0].data();
+            // Could update with match details here
+        } else {
+            banner.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error checking live match:', error);
+    }
+}
+
+// Utility Functions
+function formatDate(timestamp) {
+    if (!timestamp) return 'Date TBA';
+    
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const options = { 
+        weekday: 'short', 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    };
+    return date.toLocaleDateString('hi-IN', options);
+}
+
+function showLoading(show) {
+    // Could add loading spinner logic here
+    console.log(show ? 'Loading...' : 'Loaded!');
+}
+
+function showError(message) {
+    alert('⚠️ Error: ' + message);
+}
+
+// Real-time Listener for Live Updates (Optional)
+function setupRealtimeListeners() {
+    // Listen for new matches
+    db.collection('matches')
+        .onSnapshot(snapshot => {
+            console.log('🔄 Real-time update received');
+            loadTournamentData(); // Reload all data
+        });
+}
+
+// Export functions for use in other files
+window.VillageCricketApp = {
+    loadTournamentData,
+    formatDate,
+    teams,
+    matches,
+    players
+};
