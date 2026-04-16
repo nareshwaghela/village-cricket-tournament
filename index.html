@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏏 Village Cricket Tournament</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-brand">🏏 Village Cricket</div>
+        <div class="nav-links">
+            <a href="index.html" class="active">Home</a>
+            <a href="#matches">Matches</a>
+            <a href="#points-table">Points Table</a>
+            <a href="#teams">Teams</a>
+            <a href="admin.html" class="btn-admin">Admin Panel</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>🏏 Village Cricket Tournament 2024</h1>
+            <p id="tournament-status">Live Tournament Running</p>
+            <div class="live-match-banner" id="live-match-banner" style="display:none;">
+                <span class="live-dot"></span>
+                <span>LIVE MATCH IN PROGRESS</span>
+                <a href="scoreboard.html" class="btn-watch">Watch Live →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Stats -->
+    <section class="stats-section">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3 id="total-teams">0</h3>
+                    <p>Total Teams</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="total-matches">0</h3>
+                    <p>Matches Played</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="total-runs">0</h3>
+                    <p>Total Runs</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="total-wickets">0</h3>
+                    <p>Total Wickets</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Upcoming Matches -->
+    <section id="matches" class="matches-section">
+        <div class="container">
+            <h2>📅 Upcoming & Recent Matches</h2>
+            <div class="matches-list" id="matches-list">
+                <!-- Matches will load here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Points Table -->
+    <section id="points-table" class="points-section">
+        <div class="container">
+            <h2>🏆 Tournament Points Table</h2>
+            <div class="table-responsive">
+                <table class="points-table" id="points-table-data">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Team</th>
+                            <th>P</th>
+                            <th>W</th>
+                            <th>L</th>
+                            <th>T</th>
+                            <th>NRR</th>
+                            <th>Pts</th>
+                        </tr>
+                    </thead>
+                    <tbody id="points-table-body">
+                        <!-- Data will load here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Teams Section -->
+    <section id="teams" class="teams-section">
+        <div class="container">
+            <h2>👥 Participating Teams</h2>
+            <div class="teams-grid" id="teams-grid">
+                <!-- Teams will load here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Top Performers -->
+    <section class="performers-section">
+        <div class="container">
+            <h2>⭐ Top Performers</h2>
+            <div class="performers-grid">
+                <div class="performer-card">
+                    <h3>🏏 Top Batsman</h3>
+                    <div id="top-batsman">
+                        <p class="player-name">-</p>
+                        <p class="team-name">-</p>
+                        <p class="stats">Runs: - | Avg: -</p>
+                    </div>
+                </div>
+                <div class="performer-card">
+                    <h3>⚡ Top Bowler</h3>
+                    <div id="top-bowler">
+                        <p class="player-name">-</p>
+                        <p class="team-name">-</p>
+                        <p class="stats">Wickets: - | Avg: -</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>© 2024 Village Cricket Tournament | Made with ❤️ for Cricket</p>
+    </footer>
+
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
