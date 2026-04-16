@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ Live Scoreboard - Village Cricket</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/scoreboard.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar scoring-nav">
+        <div class="nav-brand">⚡ Live Scoring</div>
+        <div class="nav-links">
+            <a href="index.html">← Home</a>
+            <a href="admin.html" id="admin-link" style="display:none;">Admin Panel</a>
+        </div>
+    </nav>
+
+    <!-- Main Scoreboard Container -->
+    <div class="scoreboard-container">
+        
+        <!-- Match Header -->
+        <div class="match-header" id="match-header">
+            <h1>Loading Match...</h1>
+        </div>
+
+        <!-- Live Score Display -->
+        <div class="live-score-section">
+            <div class="scoreboard-main">
+                <!-- Team 1 (Batting) -->
+                <div class="team-score-card batting-team" id="team1-card">
+                    <div class="team-name-display" id="team1-name">Team 1</div>
+                    <div class="score-display">
+                        <span class="runs" id="team1-runs">0</span>
+                        <span class="separator">/</span>
+                        <span class="wickets" id="team1-wickets">0</span>
+                    </div>
+                    <div class="overs-display">
+                        (<span id="team1-overs">0.0</span> ov)
+                    </div>
+                    <div class="run-rate" id="team1-rr">RR: 0.00</div>
+                </div>
+
+                <!-- VS Badge -->
+                <div class="vs-divider">
+                    <div class="vs-badge-large">VS</div>
+                    <div class="match-status-badge" id="match-status-live">
+                        LIVE
+                    </div>
+                </div>
+
+                <!-- Team 2 (Bowling/Fielding) -->
+                <div class="team-score-card bowling-team" id="team2-card">
+                    <div class="team-name-display" id="team2-name">Team 2</div>
+                    <div class="score-display">
+                        <span class="runs" id="team2-runs">0</span>
+                        <span class="separator">/</span>
+                        <span class="wickets" id="team2-wickets">0</span>
+                    </div>
+                    <div class="overs-display">
+                        (<span id="team2-overs">0.0</span> ov)
+                    </div>
+                    <div class="run-rate" id="team2-rr">RR: 0.00</div>
+                </div>
+            </div>
+
+            <!-- Current Batsmen & Bowler Info -->
+            <div class="players-info-bar">
+                <div class="batsman-info">
+                    <h4>Batting</h4>
+                    <div class="batsmen-row">
+                        <div class="batsman">
+                            <span class="player-name" id="striker-name">-</span>
+                            <span class="player-stats" id="striker-stats">0(0)</span>
+                            <span class="on-strike badge-on-strike">*</span>
+                        </div>
+                        <div class="batsman">
+                            <span class="player-name" id="non-striker-name">-</span>
+                            <span class="player-stats" id="non-striker-stats">0(0)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="bowler-info">
+                    <h4>Bowling</h4>
+                    <div class="bowler-current">
+                        <span class="player-name" id="bowler-name">-</span>
+                        <span class="player-stats" id="bowler-stats">0 ov | 0 runs | 0 wkts</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- This Over Details -->
+            <div class="this-over-section">
+                <h4>This Over:</h4>
+                <div class="balls-display" id="this-over-balls">
+                    <span class="ball-dot">-</span><span class="ball-dot">-</span>
+                    <span class="ball-dot">-</span><span class="ball-dot">-</span>
+                    <span class="ball-dot">-</span><span class="ball-dot">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scoring Controls (Admin Only) -->
+        <div class="scoring-controls-section" id="scoring-controls" style="display:none;">
+            <h3>⚡ Update Score</h3>
+            
+            <!-- Run Buttons -->
+            <div class="runs-buttons">
+                <button onclick="addRuns(0)" class="score-btn dot-ball">0<br><small>DOT</small></button>
+                <button onclick="addRuns(1)" class="score-btn single">1</button>
+                <button onclick="addRuns(2)" class="score-btn double">2</button>
+                <button onclick="addRuns(3)" class="score-btn three">3</button>
+                <button onclick="addRuns(4)" class="score-btn four">4<br><small>FOUR!</small></button>
+                <button onclick="addRuns(6)" class="score-btn six">6<br><small>SIX!!</small></button>
+            </div>
+
+            <!-- Extras & Wicket Buttons -->
+            <div class="extras-buttons">
+                <button onclick="addWide()" class="btn-extra wide-btn">WIDE +1</button>
+                <button onclick="addNoBall()" class="btn-extra noball-btn">NO BALL +1</button>
+                <button onclick="addByes(1)" class="btn-extra byes-btn">BYES 1</button>
+                <button onclick="addLegByes(1)" class="btn-extra legbyes-btn">LEG BYES 1</button>
+            </div>
+
+            <!-- Wicket Button -->
+            <div class="wicket-button-container">
+                <button onclick="showWicketModal()" class="wicket-btn-big">🎯 WICKET!</button>
+            </div>
+
+            <!-- Over Complete / Undo -->
+            <div class="control-actions">
+                <button onclick="completeOver()" class="btn-action over-complete">Over Complete →</button>
+                <button onclick="undoLastBall()" class="btn-action undo-btn">↩️ Undo Last Ball</button>
+                <button onclick="switchStrike()" class="btn-action switch-btn">🔄 Switch Strike</button>
+            </div>
+
+            <!-- Innings Control -->
+            <div class="innings-control">
+                <button onclick="endInnings()" class="btn-danger innings-end">End Innings</button>
+            </div>
+        </div>
+
+        <!-- Match Result Section (Hidden by default) -->
+        <div class="match-result-section" id="match-result" style="display:none;">
+            <div class="result-banner">
+                <h2 id="result-text">Match Completed</h2>
+                <p id="winner-text"></p>
+                <a href="index.html" class="btn-primary">Back to Home</a>
+            </div>
+        </div>
+
+        <!-- Commentary/Event Log -->
+        <div class="commentary-section">
+            <h3>📝 Match Events</h3>
+            <div class="event-log" id="event-log">
+                <p class="log-entry">Match started...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Wicket Modal -->
+    <div id="wicket-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>🎯 Wicket Fallen!</h3>
+            
+            <div class="form-group">
+                <label>Out Batsman:</label>
+                <select id="out-batsman-select"></select>
+            </div>
+            
+            <div class="form-group">
+                <label>Dismissal Type:</label>
+                <select id="dismissal-type">
+                    <option value="bowled">Bowled</option>
+                    <option value="caught">Caught</option>
+                    <option value="lbw">LBW</option>
+                    <option value="stumped">Stumped</option>
+                    <option value="run-out">Run Out</option>
+                    <option value="hit-wicket">Hit Wicket</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>New Batsman:</label>
+                <select id="new-batsman-select"></select>
+            </div>
+            
+            <div class="modal-actions">
+                <button onclick="confirmWicket()" class="btn-primary">Confirm Wicket</button>
+                <button onclick="closeWicketModal()" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Loading match data...</p>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="js/scoring.js"></script>
+</body>
+</html>
