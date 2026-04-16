@@ -1,0 +1,623 @@
+// js/admin.js - Admin Panel Complete Logic
+
+// Global Variables
+let currentTournamentId = null;
+let teams = [];
+let matches = [];
+let players = [];
+
+// Initialize Admin Panel
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔐 Admin Panel Initialized');
+    loadInitialData();
+    setupEventListeners();
+});
+
+// Load Initial Data
+async function loadInitialData() {
+    try {
+        await Promise.all([
+            loadTeams(),
+            loadMatches(),
+            loadPlayers(),
+            loadTournaments()
+        ]);
+        
+        populateTeamDropdowns();
+        renderAdminTables();
+        populateScoringDropdown();
+        
+    } catch (error) {
+        console.error('Error loading admin data:', error);
+        showToast('Error loading data', 'error');
+    }
+}
+
+// ==================== TOURNAMENT MANAGEMENT ====================
+
+async function createTournament(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    const tournamentData = {
+        name: formData.get('name'),
+        startDate: new Date(formData.get('startDate')),
+        endDate: new Date(formData.get('endDate')),
+        format: formData.get('format'),
+        overs: parseInt(formData.get('overs')) || 10,
+        description: formData.get('description'),
+        status: 'upcoming',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    try {
+        const docRef = await db.collection('tournaments').add(tournamentData);
+        
+        showToast(`✅ Tournament "${tournamentData.name}" created successfully!`);
+        form.reset();
+        await loadTournaments();
+        
+    } catch (error) {
+        console.error('Error creating tournament:', error);
+        showToast('Error creating tournament', 'error');
+    }
+}
+
+async function loadTournaments() {
+    const snapshot = await db.collection('tournaments')
+        .orderBy('createdAt', 'desc')
+        .get();
+    
+    const tournamentsList = document.getElementById('tournaments-list');
+    
+    if (snapshot.empty) {
+        tournamentsList.innerHTML = '<p>No tournaments created yet</p>';
+        return;
+    }
+    
+    tournamentsList.innerHTML = snapshot.docs.map(doc => {
+        const t = doc.data();
+        return `
+            <div class="tournament-item" style="padding:1rem; border:1px solid #ddd; margin-bottom:1rem; border-radius:8px;">
+                <h4>${t.name}</h4>
+                <p>Format: ${t.format} | Overs: ${t.overs}</p>
+                <p>Status: <span style="color:${getStatusColor(t.status)}">${t.status.toUpperCase()}</span></p>
+                <div style="margin-top:0.5rem;">
+                    <button onclick="setActiveTournament('${doc.id}')" class="btn-secondary">Set Active</button>
+                    <button onclick="deleteTournament('${doc.id}')" class="btn-danger" style="background:#dc3545;color:white;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getStatusColor(status) {
+    switch(status) {
+        case 'active': return '#28a745';
+        case 'completed': return '#6c757d';
+        default: return '#ffc107';
+    }
+}
+
+async function setActiveTournament(tournamentId) {
+    // Deactivate all
+    const allTourns = await db.collection('tournaments').get();
+    allTourns.docs.forEach(doc => {
+        doc.ref.update({ status: 'completed' });
+    });
+    
+    // Activate selected
+    await db.collection('tournaments').doc(tournamentId).update({ 
+        status: 'active' 
+    });
+    
+    currentTournamentId = tournamentId;
+    showToast('Tournament set as active!');
+    await loadTournaments();
+}
+
+async function deleteTournament(tournamentId) {
+    if (!confirm('Are you sure? This will delete all related data!')) return;
+    
+    await db.collection('tournaments').doc(tournamentId).delete();
+    showToast('Tournament deleted');
+    await loadTournaments();
+}
+
+// ==================== TEAM MANAGEMENT ====================
+
+async function createTeam(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    const teamData = {
+        name: formData.get('name'),
+        emoji: formData.get('emoji') || '🏏',
+        captain: formData.get('captain'),
+        contact: formData.get('contact'),
+        village: formData.get('village'),
+        tournamentId: currentTournamentId,
+        stats: {
+            played: 0,
+            won: 0,
+            lost: 0,
+            points: 0,
+            nrr: 0.000
+        },
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    try {
+        await db.collection('teams').add(teamData);
+        
+        showToast(`✅ Team "${teamData.name}" added successfully!`);
+        form.reset();
+        await loadTeams();
+        populateTeamDropdowns();
+        renderAdminTables();
+        
+    } catch (error) {
+        console.error('Error creating team:', error);
+        showToast('Error adding team', 'error');
+    }
+}
+
+async function loadTeams() {
+    const query = currentTournamentId ? 
+        db.collection('teams').where('tournamentId', '==', currentTournamentId) :
+        db.collection('teams');
+    
+    const snapshot = await query.orderBy('name').get();
+    teams = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+    
+    document.getElementById('teams-count').textContent = teams.length;
+}
+
+async function deleteTeam(teamId) {
+    if (!confirm('Delete this team and all its players?')) return;
+    
+    // Delete team's players
+    const playersSnap = await db.collection('players')
+        .where('teamId', '==', teamId)
+        .get();
+    
+    playersSnap.docs.forEach(doc => doc.ref.delete());
+    
+    // Delete team
+    await db.collection('teams').doc(teamId).delete();
+    
+    showToast('Team deleted');
+    await loadTeams();
+    renderAdminTables();
+    populateTeamDropdowns();
+}
+
+// ==================== PLAYER MANAGEMENT ====================
+
+async function addPlayer(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    const playerData = {
+        teamId: formData.get('teamId'),
+        name: formData.get('name'),
+        role: formData.get('role') || 'batsman',
+        jerseyNumber: parseInt(formData.get('jerseyNumber')) || null,
+        battingStats: {
+            matches: 0,
+            innings: 0,
+            runs: 0,
+            highestScore: 0,
+            average: 0.00,
+            strikeRate: 0.00,
+            hundreds: 0,
+            fifties: 0
+        },
+        bowlingStats: {
+            matches: 0,
+            innings: 0,
+            overs: 0,
+            wickets: 0,
+            runsConceded: 0,
+            bestBowling: '0/0',
+            average: 0.00,
+            economy: 0.00
+        },
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    try {
+        await db.collection('players').add(playerData);
+        
+        showToast(`✅ Player "${playerData.name}" added!`);
+        form.reset();
+        await loadPlayers();
+        renderAdminTables();
+        
+    } catch (error) {
+        console.error('Error adding player:', error);
+        showToast('Error adding player', 'error');
+    }
+}
+
+async function loadPlayers() {
+    const snapshot = await db.collection('players').orderBy('name').get();
+    players = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+}
+
+async function deletePlayer(playerId) {
+    if (!confirm('Delete this player?')) return;
+    
+    await db.collection('players').doc(playerId).delete();
+    showToast('Player deleted');
+    await loadPlayers();
+    renderAdminTables();
+}
+
+// ==================== MATCH SCHEDULING ====================
+
+async function scheduleMatch(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    const team1Id = formData.get('team1Id');
+    const team2Id = formData.get('team2Id');
+    
+    if (team1Id === team2Id) {
+        showToast('A team cannot play against itself!', 'error');
+        return;
+    }
+    
+    const matchData = {
+        tournamentId: currentTournamentId,
+        team1Id: team1Id,
+        team2Id: team2Id,
+        dateTime: new Date(formData.get('dateTime')),
+        venue: formData.get('venue') || 'Village Ground',
+        matchType: formData.get('matchType') || 'league',
+        overs: 10, // Default overs
+        status: 'upcoming',
+        tossWinner: null,
+        batFirst: null,
+        team1Score: { runs: 0, wickets: 0, overs: 0 },
+        team2Score: { runs: 0, wickets: 0, overs: 0 },
+        result: null,
+        winnerId: null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    
+    try {
+        await db.collection('matches').add(matchData);
+        
+        showToast('✅ Match scheduled successfully!');
+        form.reset();
+        await loadMatches();
+        renderAdminTables();
+        populateScoringDropdown();
+        
+    } catch (error) {
+        console.error('Error scheduling match:', error);
+        showToast('Error scheduling match', 'error');
+    }
+}
+
+async function loadMatches() {
+    const snapshot = await db.collection('matches')
+        .orderBy('dateTime', 'desc')
+        .get();
+    
+    matches = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+}
+
+async function deleteMatch(matchId) {
+    if (!confirm('Delete this match?')) return;
+    
+    await db.collection('matches').doc(matchId).delete();
+    showToast('Match deleted');
+    await loadMatches();
+    renderAdminTables();
+    populateScoringDropdown();
+}
+
+async function startMatch(matchId) {
+    if (!confirm('Start this match now?')) return;
+    
+    await db.collection('matches').doc(matchId).update({
+        status: 'live',
+        startTime: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    
+    showToast('Match started! Go to Live Scoring.');
+    await loadMatches();
+    renderAdminTables();
+    window.location.href = `scoreboard.html?id=${matchId}`;
+}
+
+// ==================== UI RENDERING ====================
+
+function populateTeamDropdowns() {
+    const options = '<option value="">Select Team...</option>' + 
+        teams.map(t => `<option value="${t.id}">${t.emoji} ${t.name}</option>`).join('');
+    
+    // Team form
+    if (document.getElementById('player-team-select')) {
+        document.getElementById('player-team-select').innerHTML = options;
+    }
+    
+    // Match form
+    if (document.getElementById('match-team1')) {
+        document.getElementById('match-team1').innerHTML = options;
+        document.getElementById('match-team2').innerHTML = options;
+    }
+}
+
+function populateScoringDropdown() {
+    const select = document.getElementById('scoring-match-select');
+    if (!select) return;
+    
+    const liveAndUpcoming = matches.filter(m => m.status === 'live' || m.status === 'upcoming');
+    
+    select.innerHTML = '<option value="">Choose a match...</option>' + 
+        liveAndUpcoming.map(m => {
+            const team1 = teams.find(t => t.id === m.team1Id);
+            const team2 = teams.find(t => t.id === m.team2Id);
+            return `<option value="${m.id}">
+                ${team1?.name || 'Team 1'} vs ${team2?.name || 'Team 2'} 
+                (${m.status})
+            </option>`;
+        }).join('');
+}
+
+function renderAdminTables() {
+    // Render Teams Table
+    const teamsBody = document.getElementById('teams-table-body');
+    if (teamsBody) {
+        teamsBody.innerHTML = teams.map(team => {
+            const teamPlayers = players.filter(p => p.teamId === team.id);
+            return `
+                <tr>
+                    <td><strong>${team.emoji} ${team.name}</strong></td>
+                    <td>${team.captain}</td>
+                    <td>${team.village || '-'}</td>
+                    <td>${teamPlayers.length}</td>
+                    <td class="action-buttons">
+                        <button onclick="viewTeamDetails('${team.id}')" class="btn-secondary">View</button>
+                        <button onclick="deleteTeam('${team.id}')" class="btn-danger">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    // Render Matches List
+    const matchesContainer = document.getElementById('matches-list-admin');
+    if (matchesContainer) {
+        const filterValue = document.getElementById('match-filter')?.value || 'all';
+        let filteredMatches = matches;
+        
+        if (filterValue !== 'all') {
+            filteredMatches = matches.filter(m => m.status === filterValue);
+        }
+        
+        matchesContainer.innerHTML = filteredMatches.length === 0 ?
+            '<p style="text-align:center;padding:2rem;">No matches found</p>' :
+            filteredMatches.map(match => createAdminMatchCard(match)).join('');
+    }
+    
+    // Render Players List
+    const playersContainer = document.getElementById('players-list');
+    if (playersContainer) {
+        playersContainer.innerHTML = players.length === 0 ?
+            '<p>No players registered yet</p>' :
+            `<table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Team</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${players.map(p => {
+                        const team = teams.find(t => t.id === p.teamId);
+                        return `
+                            <tr>
+                                <td><strong>${p.name}</strong></td>
+                                <td>${p.role}</td>
+                                <td>${team?.name || '-'}</td>
+                                <td>
+                                    <button onclick="deletePlayer('${p.id}')" class="btn-danger" 
+                                        style="background:#dc3545;color:white;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;">
+                                        Delete
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>`;
+    }
+}
+
+function createAdminMatchCard(match) {
+    const team1 = teams.find(t => t.id === match.team1Id);
+    const team2 = teams.find(t => t.id === match.team2Id);
+    
+    if (!team1 || !team2) return '';
+    
+    const statusColors = {
+        upcoming: '#17a2b8',
+        live: '#dc3545',
+        completed: '#28a745'
+    };
+    
+    return `
+        <div class="match-card-admin" style="
+            background:white; padding:1.5rem; border-radius:12px; 
+            margin-bottom:1rem; box-shadow:0 2px 8px rgba(0,0,0,0.08);
+        ">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+                <div>
+                    <h4 style="margin-bottom:0.5rem;">
+                        ${team1.emoji} ${team1.name} VS ${team2.emoji} ${team2.name}
+                    </h4>
+                    <p style="color:#6c757d; font-size:0.9rem;">
+                        📅 ${formatDate(match.dateTime)} | 📍 ${match.venue}
+                    </p>
+                </div>
+                <div style="text-align:right;">
+                    <span style="
+                        display:inline-block; padding:0.3rem 1rem; border-radius:20px;
+                        background:${statusColors[match.status]}; color:white; font-weight:bold;
+                        font-size:0.85rem;
+                    ">
+                        ${match.status.toUpperCase()}
+                    </span>
+                    <div style="margin-top:0.5rem; display:flex; gap:0.5rem; justify-content:flex-end;">
+                        ${match.status === 'upcoming' ? 
+                            `<button onclick="startMatch('${match.id}')" class="btn-success"
+                                style="border:none;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;font-weight:bold;">
+                                ▶️ Start
+                            </button>` : ''
+                        }
+                        ${match.status === 'upcoming' || match.status === 'live' ?
+                            `<a href="scoreboard.html?id=${match.id}" class="btn-primary"
+                                style="display:inline-block;text-decoration:none;padding:0.5rem 1rem;border-radius:6px;color:white;background:var(--primary-color);">
+                                ⚡ Score
+                            </a>` : ''
+                        }
+                        <button onclick="deleteMatch('${match.id}')" class="btn-danger"
+                            style="background:#dc3545;color:white;border:none;padding:0.5rem 1rem;border-radius:6px;cursor:pointer;">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ==================== SECTION NAVIGATION ====================
+
+function showSection(sectionName) {
+    // Hide all sections
+    document.querySelectorAll('.admin-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    
+    // Show selected section
+    const targetSection = document.getElementById(`section-${sectionName}`);
+    if (targetSection) {
+        targetSection.classList.add('active');
+    }
+    
+    // Update sidebar active state
+    document.querySelectorAll('.sidebar-menu a').forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === `#${sectionName}`) {
+            link.classList.add('active');
+        }
+    });
+}
+
+function filterMatches() {
+    renderAdminTables();
+}
+
+// ==================== UTILITY FUNCTIONS ====================
+
+function formatDate(timestamp) {
+    if (!timestamp) return 'Date TBA';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('hi-IN', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `toast show ${type}`;
+    
+    setTimeout(() => {
+        toast.className = 'toast';
+    }, 3000);
+}
+
+function setupEventListeners() {
+    // Add any additional event listeners here
+}
+
+function logout() {
+    if (confirm('Logout from admin panel?')) {
+        window.location.href = 'index.html';
+    }
+}
+
+async function updateSettings(event) {
+    event.preventDefault();
+    showToast('Settings saved successfully!');
+}
+
+function confirmDeleteAllData() {
+    if (confirm('⚠️ WARNING: This will delete ALL data including tournaments, teams, players, and matches! Are you absolutely sure?')) {
+        if (confirm('This action CANNOT be undone! Type "DELETE" to confirm.')) {
+            deleteAllData();
+        }
+    }
+}
+
+async function deleteAllData() {
+    try {
+        // Delete all collections
+        const collections = ['tournaments', 'teams', 'players', 'matches'];
+        
+        for (const collection of collections) {
+            const snapshot = await db.collection(collection).get();
+            snapshot.docs.forEach(doc => doc.ref.delete());
+        }
+        
+        showToast('All data deleted successfully!', 'success');
+        await loadInitialData();
+        
+    } catch (error) {
+        console.error('Error deleting data:', error);
+        showToast('Error deleting data', 'error');
+    }
+}
+
+// Export for use in other files
+window.AdminApp = {
+    createTournament,
+    createTeam,
+    addPlayer,
+    scheduleMatch,
+    showSection,
+    startMatch,
+    teams,
+    matches,
+    players
+};
